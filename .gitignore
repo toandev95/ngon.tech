@@ -1,0 +1,4 @@
+/config.toml
+/bin/
+*.exe
+*.test

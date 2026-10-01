@@ -22,6 +22,7 @@ func NewRouter(cfg config.Config) http.Handler {
 	router.Post("/v1/messages/count_tokens", inference.ServeMessageTokenCount)
 	router.Post("/v1/chat/completions", inference.ServeChatCompletions)
 	router.Post("/v1/responses", inference.ServeResponses)
+	router.Post("/v1/images/generations", inference.ServeImageGenerations)
 	return router
 }
 

@@ -1,8 +1,9 @@
 [server]
 address = ":8080"
 
-# Example providers only. Every provider must expose OpenAI-compatible
-# /v1/chat/completions. base_url includes the API prefix, usually /v1.
+# Example providers only. Providers used for text models must expose
+# /v1/chat/completions; providers used for image models must expose
+# /v1/images/generations. base_url includes the API prefix, usually /v1.
 [providers.alpha]
 protocol = "openai"
 base_url = "https://alpha.example.com/v1"
@@ -18,7 +19,8 @@ protocol = "openai"
 base_url = "https://gamma.example.com/v1"
 api_key = ""
 
-# Public IDs are arbitrary aliases, available through BOTH client formats.
+# Public IDs are arbitrary aliases exposed through the model catalog and the
+# compatible inference endpoint.
 # These names/dates are illustrative, not a claim about actual model releases.
 # Lower priority = preferred tier. Same priority = weighted load balancing.
 # priority defaults to 0; omitted/zero weight defaults to 1.
@@ -45,4 +47,10 @@ routes = [
 display_name = "GPT-5"
 routes = [
   { provider = "alpha", model = "aa-gpt-5", priority = 0 },
+]
+
+[models.gpt-image-2]
+display_name = "GPT Image 2"
+routes = [
+  { provider = "alpha", model = "gpt-image-2", priority = 0 },
 ]

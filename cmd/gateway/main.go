@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -18,7 +19,11 @@ import (
 func main() {
 	defaultPath := os.Getenv("CONFIG_FILE")
 	if defaultPath == "" {
-		defaultPath = "config.toml"
+		executable, err := os.Executable()
+		if err != nil {
+			log.Fatalf("resolve executable path: %v", err)
+		}
+		defaultPath = filepath.Join(filepath.Dir(executable), "config.toml")
 	}
 	path := flag.String("config", defaultPath, "TOML config file")
 	flag.Parse()

@@ -8,7 +8,7 @@ Yêu cầu Go 1.26 trở lên. Từ thư mục project:
 
 ```powershell
 Copy-Item config.example.toml config.toml
-go run ./cmd/gateway
+go run ./cmd/gateway -config config.toml
 ```
 
 Hoặc chạy trực tiếp config mẫu:
@@ -18,6 +18,23 @@ go run ./cmd/gateway -config config.example.toml
 ```
 
 Cấu hình đọc một lần lúc khởi động, hoàn toàn từ TOML (kể cả API key). Đổi config thì restart. Có thể chọn file bằng `CONFIG_FILE` hoặc flag `-config`; flag có ưu tiên cao hơn.
+
+### Chạy portable trên Windows
+
+Build một executable tự chứa, máy đích không cần cài Go:
+
+```powershell
+go build -trimpath -ldflags="-s -w" -o ngon-gateway.exe ./cmd/gateway
+```
+
+Chép đúng hai file vào cùng một thư mục rồi double-click `ngon-gateway.exe`:
+
+```text
+ngon-gateway.exe
+config.toml
+```
+
+Mặc định gateway luôn tìm `config.toml` cạnh file `.exe`, kể cả khi được mở qua shortcut hoặc từ working directory khác. `-config` và `CONFIG_FILE` vẫn có thể dùng để trỏ sang file khác.
 
 ## Cấu trúc
 
@@ -29,6 +46,7 @@ internal/httpapi/models.go  # Model catalog và pagination
 internal/httpapi/messages.go # Anthropic Messages ↔ OpenAI Chat Completions
 internal/httpapi/chat_completions.go # OpenAI Chat Completions facade
 internal/httpapi/responses.go # Stateless OpenAI Responses facade
+internal/httpapi/image_generations.go # OpenAI Image Generations facade
 config.example.toml         # Mẫu provider và model mapping
 ```
 
@@ -40,6 +58,7 @@ config.example.toml         # Mẫu provider và model mapping
 | `POST /v1/messages` | Anthropic Messages-compatible facade; translates requests, responses, tools, images/files, and SSE to/from OpenAI Chat Completions upstreams. |
 | `POST /v1/chat/completions` | OpenAI Chat Completions-compatible facade; hỗ trợ JSON, tools, reasoning, vision/files và SSE. |
 | `POST /v1/responses` | Stateless OpenAI Responses-compatible facade cho Codex CLI; hỗ trợ JSON, semantic SSE, function tools, vision/files và reasoning. |
+| `POST /v1/images/generations` | OpenAI Image Generations-compatible facade; payload permissive được chuyển tiếp, response chỉ giữ field chuẩn. |
 
 Hai format cùng trả toàn bộ model công khai, không lọc theo GPT/Claude hoặc protocol upstream. Catalog được sắp theo `created_at` giảm dần rồi ID. Anthropic hỗ trợ `limit` (mặc định 20, tối đa 1000), `after_id`, `before_id`. Anthropic model items có các field chuẩn `id`, `type`, `display_name`, `created_at`, `capabilities`, `max_input_tokens`, `max_tokens`; các capability/limit chưa được cấu hình trả `null`.
 
@@ -55,7 +74,7 @@ curl http://localhost:8080/v1/messages \
 
 `models.<id>` là tên client gọi, ví dụ `claude-opus-5`. Mỗi route ánh xạ sang **provider + tên model upstream**. Client chỉ thấy ID/metadata công khai; URL, key và tên model upstream không có trong catalog.
 
-- Mọi provider phải hỗ trợ OpenAI-compatible `POST /v1/chat/completions`; `protocol` có thể bỏ qua hoặc đặt là `openai`.
+- Provider dùng cho text model phải hỗ trợ OpenAI-compatible `POST /v1/chat/completions`; provider dùng cho image model phải hỗ trợ `POST /v1/images/generations`. `protocol` có thể bỏ qua hoặc đặt là `openai`.
 - `base_url`: API base gồm prefix, ví dụ `https://host/v1`.
 - `routes`: một hoặc nhiều upstream cho cùng model công khai.
 - `priority`: tier nhỏ hơn được ưu tiên; tier lớn hơn dành cho fallback.
@@ -68,6 +87,8 @@ curl http://localhost:8080/v1/messages \
 `/v1/chat/completions` nhận payload OpenAI-compatible theo kiểu permissive và chuyển tiếp các field client gửi, chỉ thay public model bằng route upstream và chèn `system_prompt`. Response JSON/SSE được dựng lại từ các field Chat Completions chuẩn, trả public model ID và loại metadata riêng của provider. `reasoning_effort` được chuyển tiếp; số reasoning token (nếu upstream cung cấp) nằm trong `usage.completion_tokens_details.reasoning_tokens`.
 
 `/v1/responses` chuyển Responses input/items và semantic SSE sang cùng upstream Chat Completions. Endpoint này cố ý stateless: Codex CLI dùng `store: false` và tự phát lại input items nên không cần database. `previous_response_id`, Conversations API và background mode chưa được hỗ trợ; gateway trả lỗi rõ nếu client yêu cầu các chế độ cần state đó. Built-in/namespace tools không thể chạy ở upstream Chat Completions nên chỉ function tools được chuyển tiếp và allowlist.
+
+`/v1/images/generations` chuyển toàn bộ field JSON client gửi đến endpoint Image Generations của route OpenAI-compatible, chỉ thay public model bằng model upstream. Response được dựng lại từ allowlist chuẩn gồm `created`, `background`, `data`, `output_format`, `quality`, `size`, `usage`; mỗi image chỉ giữ `b64_json`, `revised_prompt`, `url`. Metadata riêng như provider, upstream model hoặc generation ID không được trả ra client.
 
 Tool call từ upstream chỉ được trả về nếu tên tool có trong `tools` của request hiện tại. Tool do provider tự chèn hoặc bịa ra bị loại ở gateway; nếu không còn tool hợp lệ, `stop_reason` được chuẩn hóa thành `end_turn`. `system_prompt` giúp định hướng identity/policy nhưng không thay thế enforcement bằng code và không thể ghi đè một hidden prompt mà provider tự thêm sau request.
 
